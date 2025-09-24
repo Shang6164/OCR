@@ -1,49 +1,58 @@
 import os
-import json
+import glob
 from sklearn.model_selection import train_test_split
 
-def load_data(image_dir, annotation_dir):
+class DatasetPreparer:
     """
-    Load images and annotations from the specified directories.
-    
-    Args:
-        image_dir (str): Path to the directory containing images.
-        annotation_dir (str): Path to the directory containing annotations.
-
-    Returns:
-        list: A list of tuples (image_path, annotation_path).
+    Class để chuẩn bị và chia tập dữ liệu cho các mô hình phát hiện đối tượng.
     """
-    data = []
-    for annotation_file in os.listdir(annotation_dir):
-        if annotation_file.endswith('.json'):
-            annotation_path = os.path.join(annotation_dir, annotation_file)
-            image_file = annotation_file.replace('.json', '.jpg')
-            image_path = os.path.join(image_dir, image_file)
-            if os.path.exists(image_path):
-                data.append((image_path, annotation_path))
-    return data
+    def __init__(self, data_root_directory):
+        self.data_root = data_root_directory
+        self.image_dir = os.path.join(self.data_root, 'images')
+        self.label_dir = os.path.join(self.data_root, 'labels')
 
-def split_data(data, test_size=0.2):
-    """
-    Split data into training and testing sets.
+    def load_all_data_paths(self):
+        """
+        Tải tất cả các đường dẫn ảnh và nhãn từ thư mục đã cho.
+        """
+        image_paths = glob.glob(os.path.join(self.image_dir, '*.jpg'))
+        all_data_pairs = []
+        for image_path in image_paths:
+            base_name = os.path.basename(image_path)
+            label_file_name = base_name.replace('.jpg', '.txt')
+            label_path = os.path.join(self.label_dir, label_file_name)
+            if os.path.exists(label_path):
+                all_data_pairs.append((image_path, label_path))
+        return all_data_pairs
 
-    Args:
-        data (list): List of data tuples (image_path, annotation_path).
-        test_size (float): Proportion of the dataset to include in the test split.
+    def split_and_write_data(self, test_size=0.2, random_state=42):
+        """
+        Chia dữ liệu thành tập huấn luyện và kiểm tra, sau đó ghi các đường dẫn vào file.
+        """
+        data_pairs = self.load_all_data_paths()
+        if not data_pairs:
+            print("Không tìm thấy cặp ảnh và nhãn phù hợp. Đang tạo dữ liệu giả lập.")
+            data_pairs = [(f'image_{i}.jpg', f'label_{i}.txt') for i in range(1, 101)]
 
-    Returns:
-        tuple: Training and testing data splits.
-    """
-    return train_test_split(data, test_size=test_size, random_state=42)
+        train_data, val_data = train_test_split(data_pairs, test_size=test_size, random_state=random_state)
+        
+        train_output_path = os.path.join(self.data_root, 'train.txt')
+        val_output_path = os.path.join(self.data_root, 'val.txt')
+
+        with open(train_output_path, 'w') as f:
+            for image_path, _ in train_data:
+                f.write(image_path + '\n')
+        
+        with open(val_output_path, 'w') as f:
+            for image_path, _ in val_data:
+                f.write(image_path + '\n')
+
+        return train_output_path, val_output_path
 
 if __name__ == "__main__":
-    IMAGE_DIR = "../card_cropping_data/images"
-    ANNOTATION_DIR = "../card_cropping_data/annotations"
-
-    # Load and split data
-    data = load_data(IMAGE_DIR, ANNOTATION_DIR)
-    train_data, test_data = split_data(data)
-
-    print(f"Total data: {len(data)}")
-    print(f"Training data: {len(train_data)}")
-    print(f"Testing data: {len(test_data)}")
+    DATA_DIR = "../your_yolo_dataset"
+    preparer = DatasetPreparer(DATA_DIR)
+    train_file, val_file = preparer.split_and_write_data()
+    
+    print(f"Đường dẫn file huấn luyện: {train_file}")
+    print(f"Đường dẫn file kiểm tra: {val_file}")

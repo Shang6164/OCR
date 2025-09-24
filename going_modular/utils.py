@@ -1,46 +1,42 @@
 import numpy as np
+import cv2
 
-def calculate_metrics(predictions, targets, threshold=0.5):
+def calculate_iou_for_bboxes(box1, box2):
     """
-    Calculate precision, recall, and F1-score for binary predictions.
-
-    Args:
-        predictions (np.ndarray): Predicted values (e.g., heatmaps).
-        targets (np.ndarray): Ground truth values.
-        threshold (float): Threshold to binarize predictions.
-
-    Returns:
-        dict: A dictionary containing precision, recall, and F1-score.
+    Tính toán IoU giữa hai bounding box.
+    Định dạng box: [x_min, y_min, x_max, y_max].
     """
-    predictions = (predictions > threshold).astype(int)
-    targets = targets.astype(int)
+    x_min_intersect = max(box1[0], box2[0])
+    y_min_intersect = max(box1[1], box2[1])
+    x_max_intersect = min(box1[2], box2[2])
+    y_max_intersect = min(box1[3], box2[3])
 
-    true_positive = np.sum((predictions == 1) & (targets == 1))
-    false_positive = np.sum((predictions == 1) & (targets == 0))
-    false_negative = np.sum((predictions == 0) & (targets == 1))
+    intersect_width = max(0, x_max_intersect - x_min_intersect)
+    intersect_height = max(0, y_max_intersect - y_min_intersect)
+    intersection_area = intersect_width * intersect_height
 
-    precision = true_positive / (true_positive + false_positive + 1e-8)
-    recall = true_positive / (true_positive + false_negative + 1e-8)
-    f1_score = 2 * (precision * recall) / (precision + recall + 1e-8)
+    box1_area = (box1[2] - box1[0]) * (box1[3] - box1[1])
+    box2_area = (box2[2] - box2[0]) * (box2[3] - box2[1])
 
-    return {
-        "precision": precision,
-        "recall": recall,
-        "f1_score": f1_score
-    }
+    union_area = box1_area + box2_area - intersection_area
 
-def visualize_heatmap(image, heatmap):
+    iou_result = intersection_area / (union_area + 1e-6)
+    return iou_result
+
+def order_corner_points(corners):
     """
-    Overlay a heatmap on an image for visualization.
-
-    Args:
-        image (np.ndarray): The original image.
-        heatmap (np.ndarray): The heatmap to overlay.
-
-    Returns:
-        np.ndarray: The image with the heatmap overlay.
+    Sắp xếp 4 điểm góc của thẻ theo thứ tự: trên-trái, trên-phải, dưới-phải, dưới-trái.
+    Input: mảng NumPy 2D của 4 điểm.
+    Output: mảng NumPy chứa các điểm đã sắp xếp.
     """
-    import cv2
-    heatmap = cv2.applyColorMap((heatmap * 255).astype(np.uint8), cv2.COLORMAP_JET)
-    overlay = cv2.addWeighted(image, 0.6, heatmap, 0.4, 0)
-    return overlay
+    ordered_points = np.zeros((4, 2), dtype="float32")
+    
+    sum_coords = corners.sum(axis=1)
+    ordered_points[0] = corners[np.argmin(sum_coords)]  # top-left có tổng nhỏ nhất
+    ordered_points[2] = corners[np.argmax(sum_coords)]  # bottom-right có tổng lớn nhất
+    
+    diff_coords = np.diff(corners, axis=1)
+    ordered_points[1] = corners[np.argmin(diff_coords)] # top-right có hiệu nhỏ nhất
+    ordered_points[3] = corners[np.argmax(diff_coords)] # bottom-left có hiệu lớn nhất
+    
+    return ordered_points
